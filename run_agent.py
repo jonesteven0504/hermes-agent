@@ -8877,6 +8877,7 @@ class AIAgent:
             except Exception:
                 pass
 
+        # TODO: 检查调用的轮次是否超过限制？
         while (api_call_count < self.max_iterations and self.iteration_budget.remaining > 0) or self._budget_grace_call:
             # Reset per-turn checkpoint dedup so each iteration can take one snapshot
             self._checkpoint_mgr.new_turn()
@@ -9284,6 +9285,7 @@ class AIAgent:
                         if isinstance(getattr(self, "client", None), Mock):
                             _use_streaming = False
 
+                    # 调用大模型
                     if _use_streaming:
                         response = self._interruptible_streaming_api_call(
                             api_kwargs, on_first_delta=_stop_spinner
@@ -10918,7 +10920,8 @@ class AIAgent:
                 elif hasattr(self, "_codex_incomplete_retries"):
                     self._codex_incomplete_retries = 0
                 
-                # Check for tool calls
+                # 判断模型是否要调用工具:
+                # 如果要调用工具
                 if assistant_message.tool_calls:
                     if not self.quiet_mode:
                         self._vprint(f"{self.log_prefix}🔧 Processing {len(assistant_message.tool_calls)} tool call(s)...")
@@ -11050,6 +11053,9 @@ class AIAgent:
                             
                             # Respond with tool error results for each tool call
                             invalid_names = {name for name, _ in invalid_json_args}
+
+
+                            # 根据输出的调用工具的列表清单，生成工具调用信息
                             for tc in assistant_message.tool_calls:
                                 if tc.function.name in invalid_names:
                                     err = next(e for n, e in invalid_json_args if n == tc.function.name)
@@ -11148,6 +11154,7 @@ class AIAgent:
                         except Exception:
                             pass
 
+                    # 核心：调用工具
                     self._execute_tool_calls(assistant_message, messages, effective_task_id, api_call_count)
 
                     # Reset per-turn retry counters after successful tool
@@ -11195,6 +11202,7 @@ class AIAgent:
                     else:
                         _real_tokens = estimate_messages_tokens_rough(messages)
 
+                    # 压缩上下文
                     if self.compression_enabled and _compressor.should_compress(_real_tokens):
                         self._safe_print("  ⟳ compacting context…")
                         messages, active_system_prompt = self._compress_context(
@@ -11214,7 +11222,7 @@ class AIAgent:
                     # Continue loop for next response
                     continue
                 
-                else:
+                else:  # 模型没有调用工具
                     # No tool calls - this is the final response
                     final_response = assistant_message.content or ""
                     
@@ -11671,6 +11679,7 @@ class AIAgent:
                 break
 
         # Build result with interrupt info if applicable
+        # 给出最终的答案：final_response
         result = {
             "final_response": final_response,
             "last_reasoning": last_reasoning,
